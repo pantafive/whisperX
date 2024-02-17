@@ -1,10 +1,9 @@
 import numpy as np
 import pandas as pd
+import torchaudio
 from pyannote.audio import Pipeline
 from typing import Optional, Union
 import torch
-
-from .audio import load_audio, SAMPLE_RATE
 
 
 class DiarizationPipeline:
@@ -18,14 +17,10 @@ class DiarizationPipeline:
             device = torch.device(device)
         self.model = Pipeline.from_pretrained(model_name, use_auth_token=use_auth_token).to(device)
 
-    def __call__(self, audio: Union[str, np.ndarray], num_speakers=None, min_speakers=None, max_speakers=None):
-        if isinstance(audio, str):
-            audio = load_audio(audio)
-        audio_data = {
-            'waveform': torch.from_numpy(audio[None, :]),
-            'sample_rate': SAMPLE_RATE
-        }
-        segments = self.model(audio_data, num_speakers = num_speakers, min_speakers=min_speakers, max_speakers=max_speakers)
+    def __call__(self, audio: str, num_speakers=None, min_speakers=None, max_speakers=None) -> pd.DataFrame:
+        waveform, sample_rate = torchaudio.load(audio)
+        audio_in_memory = {"waveform": waveform, "sample_rate": sample_rate}
+        segments = self.model(audio_in_memory, num_speakers=num_speakers, min_speakers=min_speakers, max_speakers=max_speakers)
         diarize_df = pd.DataFrame(segments.itertracks(yield_label=True), columns=['segment', 'label', 'speaker'])
         diarize_df['start'] = diarize_df['segment'].apply(lambda x: x.start)
         diarize_df['end'] = diarize_df['segment'].apply(lambda x: x.end)
